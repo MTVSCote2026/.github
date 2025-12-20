@@ -18,29 +18,45 @@ jobs:
       - name: Clone public repos (skip if missing, never fail)
         shell: bash
         run: |
-          set +e  # 어떤 실패도 job을 죽이지 않게
+          set +e
           ORG="${{ github.repository_owner }}"
           mkdir -p repos
 
           clone_if_exists () {
             local repo="$1"
             local url="https://github.com/${ORG}/${repo}.git"
+            local tmp="repos/${repo}.tmp"
+            local dst="repos/${repo}"
 
-            # 레포가 없거나 네트워크 이슈가 있어도 "실패하지 않고" 스킵
+            # 레포가 없어도/네트워크 이슈여도 실패하지 않게 처리
             git ls-remote --exit-code "$url" >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-              rm -rf "repos/${repo}"
-              git clone --depth 50 "$url" "repos/${repo}" >/dev/null 2>&1 || true
+            if [ $? -ne 0 ]; then
+              echo "Skipping (not found): ${repo}"
+              return 0
             fi
+
+            rm -rf "$tmp" "$dst"
+            echo "Cloning: ${repo}"
+
+            git clone --depth 200 "$url" "$tmp" >/dev/null 2>&1
+            if [ $? -eq 0 ] && [ -d "$tmp/.git" ]; then
+              mv "$tmp" "$dst"
+            else
+              rm -rf "$tmp"
+              echo "Clone failed but continuing: ${repo}"
+            fi
+            return 0
           }
 
-          # 이름을 나중에 바꾸거나 비워도 됩니다. 없어도 실패하지 않습니다.
+          # 확정 레포
           clone_if_exists "carttman"
           clone_if_exists "flatroad"
+
+          # 나중에 정해지면 여기만 바꾸거나 추가하세요.
           clone_if_exists "repo3"
           clone_if_exists "repo4"
 
-          exit 0  # 어떤 경우든 성공 처리
+          exit 0
 
       - name: Setup Python
         uses: actions/setup-python@v5
