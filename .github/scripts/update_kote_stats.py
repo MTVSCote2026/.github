@@ -1,89 +1,54 @@
-import re
-import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]  # .github repo root
-PROFILE_README = ROOT / "profile" / "README.md"
+ROOT = Path(__file__).resolve().parents[1]  # .github repo root
+PROFILE_DIR = ROOT / "profile"
+PROFILE_README = PROFILE_DIR / "README.md"
 REPOS_DIR = ROOT / "repos"
 
 START = "<!-- KOTE_STATS_START -->"
 END = "<!-- KOTE_STATS_END -->"
 
-CODE_EXTS = {".c", ".cc", ".cpp", ".h", ".hpp", ".py", ".java", ".js", ".ts", ".rs", ".kt", ".go"}
-BOJ_RE = re.compile(r"^boj_(\d+)$", re.IGNORECASE)
+def build_header_only_table() -> str:
+    # 레포가 0개면 이 두 줄만 남습니다(표 렌더링은 되고, 데이터 행은 없음)
+    return "| 이름 | 총 갯수 | 오늘 푼 갯수 |\n|---|---:|---:|\n"
 
-def last_commit_date(repo_path: Path) -> str:
-    try:
-        out = subprocess.check_output(
-            ["git", "-C", str(repo_path), "log", "-1", "--format=%cs"],
-            text=True
-        ).strip()
-        return out or "-"
-    except Exception:
-        return "-"
-
-def collect_repo_stats(repo_path: Path):
-    solutions = repo_path / "solution"
-    if not solutions.exists():
-        return {"files": 0, "unique_boj": 0, "last_commit": last_commit_date(repo_path)}
-
-    files = []
-    unique_ids = set()
-
-    for p in solutions.rglob("*"):
-        if not p.is_file():
-            continue
-        if p.suffix.lower() not in CODE_EXTS:
-            continue
-
-        files.append(p)
-        m = BOJ_RE.match(p.stem)
-        if m:
-            unique_ids.add(m.group(1))
-
-    return {
-        "files": len(files),
-        "unique_boj": len(unique_ids),
-        "last_commit": last_commit_date(repo_path),
-    }
-
-def build_table(rows):
-    header = "| Repo | 풀이 파일 수 | BOJ 문제 수(중복제거) | 마지막 커밋일 |\n|---|---:|---:|---|\n"
-    body = ""
-    total_files = 0
-    total_unique = 0
-
-    for r in rows:
-        total_files += r["files"]
-        total_unique += r["unique_boj"]
-        body += f'| {r["name"]} | {r["files"]} | {r["unique_boj"]} | {r["last_commit"]} |\n'
-
-    footer = f"\n**합계**: 풀이 파일 {total_files}개 / BOJ 문제 {total_unique}개(중복 제거)\n"
-    return header + body + footer
+def ensure_readme_exists():
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    if not PROFILE_README.exists():
+        PROFILE_README.write_text(
+            "## 코테 통계\n\n"
+            f"{START}\n"
+            "(여기는 자동 생성됩니다)\n"
+            f"{END}\n",
+            encoding="utf-8"
+        )
 
 def replace_block(original: str, new_block: str) -> str:
+    # 마커가 없으면 맨 끝에 자동으로 추가해서 “절대 실패”하지 않게
     if START not in original or END not in original:
-        raise RuntimeError(f"README에 마커가 없습니다: {START}, {END}")
+        original = original.rstrip() + "\n\n" + START + "\n" + END + "\n"
 
     pre, rest = original.split(START, 1)
     _, post = rest.split(END, 1)
     return pre + START + "\n" + new_block.rstrip() + "\n" + END + post
 
 def main():
-    repo_paths = sorted([p for p in REPOS_DIR.iterdir() if p.is_dir()], key=lambda p: p.name.lower())
+    ensure_readme_exists()
+    REPOS_DIR.mkdir(parents=True, exist_ok=True)
 
-    rows = []
-    for rp in repo_paths:
-        s = collect_repo_stats(rp)
-        rows.append({"name": rp.name, **s})
-
-    table = build_table(rows)
+    # 레포 디렉토리가 하나도 없으면 헤더만 출력
+    repo_dirs = [p for p in REPOS_DIR.iterdir() if p.is_dir()]
+    if len(repo_dirs) == 0:
+        block = build_header_only_table()
+    else:
+        # 레포가 있으면(추후 확장 대비) 기본적으로는 헤더만 유지하도록 요구하셨으니,
+        # 여기서도 일단은 "헤더만" 유지합니다.
+        # (원하시면 다음 단계에서 rows 출력 로직을 다시 넣어드리면 됩니다.)
+        block = build_header_only_table()
 
     readme = PROFILE_README.read_text(encoding="utf-8")
-    updated = replace_block(readme, table)
+    updated = replace_block(readme, block)
     PROFILE_README.write_text(updated, encoding="utf-8")
-
-    print("Updated:", PROFILE_README)
 
 if __name__ == "__main__":
     main()

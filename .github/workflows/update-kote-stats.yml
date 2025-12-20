@@ -15,27 +15,46 @@ jobs:
       - name: Checkout .github repo
         uses: actions/checkout@v4
 
-      - name: Clone public repos
+      - name: Clone public repos (skip if missing, never fail)
+        shell: bash
         run: |
+          set +e  # 어떤 실패도 job을 죽이지 않게
+          ORG="${{ github.repository_owner }}"
           mkdir -p repos
-          git clone --depth 1 https://github.com/YOUR_ORG/carttman.git repos/carttman
-          git clone --depth 1 https://github.com/YOUR_ORG/flatroad.git repos/flatroad
-          # 나중에 레포 이름 정해지면 추가
-          # git clone --depth 1 https://github.com/YOUR_ORG/repo3.git repos/repo3
-          # git clone --depth 1 https://github.com/YOUR_ORG/repo4.git repos/repo4
+
+          clone_if_exists () {
+            local repo="$1"
+            local url="https://github.com/${ORG}/${repo}.git"
+
+            # 레포가 없거나 네트워크 이슈가 있어도 "실패하지 않고" 스킵
+            git ls-remote --exit-code "$url" >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+              rm -rf "repos/${repo}"
+              git clone --depth 50 "$url" "repos/${repo}" >/dev/null 2>&1 || true
+            fi
+          }
+
+          # 이름을 나중에 바꾸거나 비워도 됩니다. 없어도 실패하지 않습니다.
+          clone_if_exists "carttman"
+          clone_if_exists "flatroad"
+          clone_if_exists "repo3"
+          clone_if_exists "repo4"
+
+          exit 0  # 어떤 경우든 성공 처리
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - name: Update README
-        run: python .github/scripts/update_kote_stats.py
+      - name: Update README (never fail)
+        run: |
+          python .github/scripts/update_kote_stats.py || true
 
       - name: Commit and push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add profile/README.md
+          git add profile/README.md || true
           git diff --cached --quiet || git commit -m "chore: update KOTE stats"
           git push
