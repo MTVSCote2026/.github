@@ -12,5 +12,5 @@
 <!-- KOTE_STATS_START -->
 | 이름 | 총 갯수 | 오늘 푼 갯수 |
 |---|---:|---:|
-| flatroad | 12 | 0 |
+| flatroad | 13 | 1 |
 <!-- KOTE_STATS_END -->
